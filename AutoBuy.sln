@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoBuy", "ShopUpdata\AutoBuy.csproj", "{A49892ED-5D91-4587-95D8-F13E47632AFE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A49892ED-5D91-4587-95D8-F13E47632AFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A49892ED-5D91-4587-95D8-F13E47632AFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A49892ED-5D91-4587-95D8-F13E47632AFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A49892ED-5D91-4587-95D8-F13E47632AFE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4600FF5A-AA7B-4D42-B61C-8EF60A478644}
+	EndGlobalSection
+EndGlobal
