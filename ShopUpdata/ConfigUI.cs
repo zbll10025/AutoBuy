@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using YKF;
+using static AutoBuy.AutoBuy;
 using Text = UnityEngine.UI.Text;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
@@ -26,7 +27,6 @@ namespace AutoBuy
 
 
     }
-
     public class CustomTab : YKLayout<object>
     {
         public List<string> filterList = new List<string> { "Default", "Name", "Detail", "Tags", "Element" , "StockNum" };
@@ -148,6 +148,20 @@ namespace AutoBuy
             component.GetOrCreate<LayoutElement>().preferredWidth = 150f;
             return;
         }
+    }
+
+    public class ConfigData
+    {
+        public bool isGuide = true;
+        public int rerollNum = 0;
+        public List<PlanData> palnList = new List<PlanData>();
+    }
+    public class PlanData
+    {
+        public string keyword = "";
+        public FilterMdoe filterMdoe = FilterMdoe.Default;
+        public bool isAllMatch = false;
+        public bool isActive = true;
     }
 
 }
