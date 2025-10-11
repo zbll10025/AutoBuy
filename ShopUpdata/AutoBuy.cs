@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UDebug = UnityEngine.Debug;
+using Newtonsoft.Json;
 namespace AutoBuy
 {
     [BepInPlugin("me.acc.plugin.AutoBuy", "AutoBuy", "1.0.0")]
@@ -14,22 +15,12 @@ namespace AutoBuy
         public static List<ButtonGrid> guidButtons = new List<ButtonGrid>();
         public static UIInventory uIInventory;
 
-        static ConfigEntry<string> cKeyword;
-        static ConfigEntry<int> cConstRerollNum;
-        static ConfigEntry<FilterMdoe> cFilterMdoe;
-        static ConfigEntry<bool> cIsGuide;
-        static ConfigEntry<bool> cIsAllMatch;
+        public static ConfigData configeData;
         static ConfigEntry<KeyCode> uiKeyCode;
-        public static string keyword = "";
-        public static int constRerollNum = 0;
-        public static FilterMdoe filterMdoe ;
-        public static bool isGuide = true;
-        public static bool isAllMatch = false;
-
         public static string pasueMessage = "未启动自动购买";
         public static bool pause = true;
         public static int count = 0;
-        public static int rerollNum = constRerollNum;
+        public static int rerollNum = 0;
         
         public enum FilterMdoe
         {
@@ -44,7 +35,8 @@ namespace AutoBuy
         {
             Logger.LogInfo("hello AutoBuy");
             Harmony.CreateAndPatchAll(typeof(AutoBuy));
-            Init();
+            configeData = JsonHelper.Load<ConfigData>(new ConfigData() ,"AutoBuy.json");
+            uiKeyCode = Config.Bind<KeyCode>("config", "UIKeyCode", KeyCode.P, "模组设置界面的按键/Mod Configuration Buttons");
         }
         void Update()
         {
@@ -52,6 +44,10 @@ namespace AutoBuy
             {
                 ConfigLayer.CreateLayer(this);
             }
+        }
+        private void OnApplicationQuit()
+        {
+            JsonHelper.Save<ConfigData>(configeData, "AutoBuy.json");
         }
         //[HarmonyPostfix, HarmonyPatch(typeof(InvOwner), "OnRightClick", new Type[]{
         //    typeof( ButtonGrid )
@@ -97,7 +93,7 @@ namespace AutoBuy
                 return;
             }
             guidButtons.Clear();
-            SearchItems(keyword, filterMdoe, list);
+            SearchItems(list);
             foreach (ButtonGrid button in list)
             {
                 Thing thing = button.card as Thing;
@@ -105,7 +101,7 @@ namespace AutoBuy
                    
                 if (guidButtons.Contains(button))
                 {
-                    if (isGuide)
+                    if (configeData.isGuide)
                     {
                       button.Attach("guide", rightAttach: false);
                     }
@@ -731,52 +727,62 @@ namespace AutoBuy
         public static void StartAuto()
         {
             if (uIInventory == null) { return; }
-            rerollNum = constRerollNum;
+            rerollNum = configeData.rerollNum;
             pause = false;
             LayerInventory.TryShowGuide(uIInventory.list);
         }
-        public static void SearchItems(string k, FilterMdoe mdoe, List<ButtonGrid> list)
+        public static void SearchItems(List<ButtonGrid> list)
         {        
                 foreach (ButtonGrid item in list)
                 {
                     Thing t = item.card as Thing;
                     if (t == null) continue;
                     ItemInfo itemInfo = GetThingInfo(t);
-                    switch (mdoe)
+                    foreach (var i in configeData.planList)
                     {
-                    case FilterMdoe.Name:
-                        if (IsMatch(itemInfo.name, k,isNormal:true,isall: isAllMatch))
-                           {
-                                guidButtons.Add(item);
-                            }break;
-                    case FilterMdoe.Detail:
-                        if (IsMatch(itemInfo.detail, k))
+                        if (!i.isActive) {  continue; }
+                        switch (i.filterMdoe)
                         {
-                            guidButtons.Add(item);
-                        }break;
-                    case FilterMdoe.Tags:
-                        if (IsMatch(itemInfo.tags, k))
-                        {
-                            guidButtons.Add(item);
-                        }break;
-                    case FilterMdoe.Element:
-                        if (IsMatch(itemInfo.elements, k))
-                        {
-                            guidButtons.Add(item);
-                        }break;
-                    case FilterMdoe.StockNum:
-                        if (IsMatch(itemInfo.stockNum, k))
-                        {
-                            guidButtons.Add(item);
-                        }break;
-                    case FilterMdoe.Default:
-                        if (IsMatch(itemInfo.allText, k))
-                        {
-                            guidButtons.Add(item);
-                        }break;
-                }
+                            case FilterMdoe.Name:
+                                if (IsMatch(itemInfo.name, i.keyword, isNormal: true, isall: i.isAllMatch))
+                                {
+                                AddToButtonGrid(item);
+                                }
+                                break;
+                            case FilterMdoe.Detail:
+                            if (IsMatch(itemInfo.detail, i.keyword))
+                                {
+                                AddToButtonGrid(item);
+                                }
+                                break;
+                            case FilterMdoe.Tags:
+                                if (IsMatch(itemInfo.tags, i.keyword))
+                                {
+                                    AddToButtonGrid(item);
+                                }
+                                break;
+                            case FilterMdoe.Element:
+                                if (IsMatch(itemInfo.elements, i.keyword))
+                                {
+                                    AddToButtonGrid(item);
+                                }
+                                break;
+                            case FilterMdoe.StockNum:
+                                if (IsMatch(itemInfo.stockNum, i.keyword))
+                                {
+                                    AddToButtonGrid(item);
+                                }
+                                break;
+                            case FilterMdoe.Default:
+                                if (IsMatch(itemInfo.allText, i.keyword))
+                                {
+                                    AddToButtonGrid(item);
+                                }
+                                break;
+                    }
+                    }
 
-            }
+                }
         }
         public static bool IsMatch(string text, string keyword,bool isNormal = false,bool isall = false)
         {
@@ -838,46 +844,16 @@ namespace AutoBuy
                 return true;
             }
         }
+        public static void AddToButtonGrid(ButtonGrid b)
+        {
+            if (!guidButtons.Contains(b))
+            {
+                guidButtons.Add(b);
+            }
+            
+        }
         #endregion
-        public void Init()
-        {
-           
-            cKeyword = Config.Bind<string>("config", "Keyword", "", "想要匹配的关键字 / The keywords you want to match");
-            cConstRerollNum = Config.Bind<int>("config", "RerollNum", 0, "设置最多刷新多少次 / Set the maximum number of rerolls");
-            cFilterMdoe = Config.Bind<FilterMdoe>("config", "FilterMdoe", FilterMdoe.Default,
-            "去匹配物品的哪个部分，" +
-            "Default: 基础的所有部分，" +
-            "Name: 名字部分，" +
-            "Detail: 介绍部分，" +
-            "Tags: 标签部分，" +
-            "Element: 附魔词条部分，" +
-            "StockNum: 针对远程武器有多少孔。" +
-            "\n\n" + // 分隔开
-            "Which part of the item to match, " +
-            "Default: All basic parts, " +
-            "Name: Name, " +
-            "Detail: Description, " +
-            "Tags: Tags, " +
-            "Element: Enchantment attributes, " +
-            "StockNum: Number of slots (for ranged weapons).");
-            cIsGuide = Config.Bind<bool>("config", "IsGuide", true, "是否标亮匹配到的物品 / Whether to highlight matched items");
-            cIsAllMatch = Config.Bind<bool>("config", "IsAllMatch", false, "是否为完全匹配(只针对名字部分) / Whether to use exact match (only applies to name part)");
-            uiKeyCode = Config.Bind<KeyCode>("config", "UIKeyCode", KeyCode.P, "模组设置界面的按键/Mod Configuration Buttons");
-
-            keyword = cKeyword.Value;
-            constRerollNum = cConstRerollNum.Value;
-            filterMdoe = cFilterMdoe.Value;
-            isGuide = cIsGuide.Value;
-            isAllMatch = cIsAllMatch.Value;
-        }
-        public static void Save()
-        {
-            cKeyword.Value = keyword;
-            cConstRerollNum.Value = constRerollNum;
-            cFilterMdoe.Value = filterMdoe;
-            cIsGuide.Value = isGuide;
-            cIsAllMatch.Value = isAllMatch;
-        }
+        
     }
     public class ItemInfo
     {

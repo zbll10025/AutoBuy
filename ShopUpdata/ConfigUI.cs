@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Xml.Serialization;
 using UnityEngine;
 using UnityEngine.UI;
 using YKF;
 using static AutoBuy.AutoBuy;
+using static System.Net.Mime.MediaTypeNames;
 using Text = UnityEngine.UI.Text;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
@@ -15,7 +17,7 @@ namespace AutoBuy
     public class ConfigLayer : YKLayer<object>
     {
         public Button closeButton;
-        public override Rect Bound { get; } = new Rect(0, 0, 320, 350);
+        public override Rect Bound { get; } = new Rect(0, 0, 700, 700);
         public override void OnLayout()
         {
             CustomTab tab =  CreateTab<CustomTab>("AuotoBuySetting", "setting1");
@@ -25,6 +27,7 @@ namespace AutoBuy
             YK.CreateLayer<ConfigLayer>();
         }
 
+        
 
     }
     public class CustomTab : YKLayout<object>
@@ -32,97 +35,126 @@ namespace AutoBuy
         public List<string> filterList = new List<string> { "Default", "Name", "Detail", "Tags", "Element" , "StockNum" };
         public const float textWidth = 110;
         public const float valueWidth = 150;
-        public bool isShowIsAllMatch = false;
-        public GameObject allMatchObject;
+        public const int planCount = 10;
+        public List<PlanLayout> planeList = new List<PlanLayout>();
+        public GameObject addButtonObject;
+        
         public override void OnLayout()
         {
-            YKVertical mainLayout = this.Vertical();
-            keyWordItem(mainLayout);
+            YKLayout mainLayout = this.Vertical();
             RerollNumItem(mainLayout);
-            FilterMdoeItem(mainLayout);
             IsGuideItem(mainLayout);
-            allMatchObject = IsAllMatchItem(mainLayout).gameObject;
-            RefreshState(isShowIsAllMatch);
+            //ItemNameItem(mainLayout);
+            Header(mainLayout);
+            for (int i = 0; i < planCount; i++)
+            {
+                PlanItem(mainLayout).gameObject.SetActive(false);
+            }
+            addButtonObject = mainLayout.Button("Add", () =>
+            {
+                AddPlan();
+            }).gameObject;
+            RefreshList();
         }
-        public YKHorizontal keyWordItem(YKVertical father)
-        {
-            YKHorizontal ho = father.Horizontal();
-            var text = ho.Text("keyWord", color: FontColor.DontChange);
-            SetSize(text, w: textWidth);
-            string s = AutoBuy.keyword;
-            UIInputSet(s, layOut: ho,onInput:(string value) => { AutoBuy.keyword = value;AutoBuy.Save(); });
-            return ho;
-        }
-        public YKHorizontal RerollNumItem(YKVertical father)
+        public YKLayout RerollNumItem(YKLayout father)
         {
             YKHorizontal ho = father.Horizontal();
             UIText text =ho.Text("RerollNum", color: FontColor.DontChange);
             SetSize(text, w: textWidth);
-            string s = AutoBuy.constRerollNum.ToString();
-            var value = ho.InputText(s, onInput: (v) => { AutoBuy.constRerollNum = v; AutoBuy.Save(); });
+            string s = AutoBuy.configeData.rerollNum.ToString();
+            var value = ho.InputText(s, onInput: (v) => { AutoBuy.configeData.rerollNum = v;});
             value.Find("Text").gameObject.GetComponent<Text>().alignment = TextAnchor.MiddleLeft;
             SetSize(value, w: valueWidth);
             return ho;
         }
-        public YKHorizontal FilterMdoeItem(YKVertical father)
-        {
-            YKHorizontal ho = father.Horizontal();
-            UIText text = ho.Text("FilterMdoe", color: FontColor.DontChange);
-            SetSize(text, w: textWidth);
-            var value = ho.Dropdown(filterList, value: (int)AutoBuy.filterMdoe, action: (v) => {
-                AutoBuy.filterMdoe = (AutoBuy.FilterMdoe)v;
-                if (v == 1) {
-                    isShowIsAllMatch = true;
-                }
-                else {
-                    isShowIsAllMatch = false;
-                }
-                RefreshState(isShowIsAllMatch);
-                AutoBuy.Save();
-            });
-            if ((int)AutoBuy.filterMdoe == 1)
-            {
-                isShowIsAllMatch = true;
-            }
-            else
-            {
-                isShowIsAllMatch = false;
-            }
-            SetSize(value, w: valueWidth);
-            return ho;
-        }
-        public YKHorizontal IsGuideItem(YKVertical father)
+        public YKLayout IsGuideItem(YKLayout father)
         {
             YKHorizontal ho = father.Horizontal();
             UIText text = ho.Text("IsGuide", color: FontColor.DontChange);
             SetSize(text, w: textWidth);
-            ho.Toggle("", isOn: AutoBuy.isGuide, onClick: (b) => { AutoBuy.isGuide = b; AutoBuy.Save(); });
+            ho.Toggle("", isOn: AutoBuy.configeData.isGuide, onClick: (b) => { AutoBuy.configeData.isGuide = b; });
             return ho;
 
         }
-        public YKHorizontal IsAllMatchItem(YKVertical father)
+        public YKLayout Header(YKLayout father)
         {
             YKHorizontal ho = father.Horizontal();
-            UIText text =ho.Text("IsAllMatch", color: FontColor.DontChange);
-            SetSize(text, w: textWidth);
-            ho.Toggle("", isOn: AutoBuy.isAllMatch, onClick: (b) => { AutoBuy.isAllMatch = b; AutoBuy.Save(); });
+            ho.Header("IsActive");
+            ho.Header("keyWord");
+            ho.Spacer(1, 40);
+            ho.Header("FilterMdoe");
+            ho.Spacer(1, 40);
+            ho.Header("IsAllMatch");
+            ho.Spacer(1, 120);
+            return ho;
+        }
+        public YKLayout IsActiveItem(PlanLayout father)
+        {
+            YKHorizontal ho = father.Horizontal();
+            father.activeButton=ho.Toggle("", isOn: true, onClick:father.OnActiveButton);
+            SetSize(father.activeButton, 36, 60);
+            return ho;
+        }
+        public YKLayout keyWordItem(PlanLayout father)
+        {
+            YKHorizontal ho = father.Horizontal();
+            //var text = ho.Text("keyWord", color: FontColor.DontChange);
+            //SetSize(text, w: textWidth);
+            string s = "";
+            father.keyWordInput = UIInputSet(s, layOut: ho,onInput:father.OnKeyWordInput);
+            return ho;
+        }
+        public YKLayout FilterMdoeItem(PlanLayout father)
+        {
+            YKHorizontal ho = father.Horizontal();
+            //UIText text = ho.Text("FilterMdoe", color: FontColor.DontChange);
+            //SetSize(text, w: textWidth);
+            father.drop = ho.Dropdown(filterList, value: 0, action: father.OnDrop);
+            SetSize(father.drop, w: valueWidth);
+            return ho;
+        }
+        public YKLayout IsAllMatchItem(PlanLayout father)
+        {
+            YKHorizontal ho = father.Horizontal();
+            //UIText text =ho.Text("IsAllMatch", color: FontColor.DontChange);
+            //SetSize(text, w: textWidth);
+            father.allMatchButton = ho.Toggle("", isOn:false, onClick: father.OnAllMatchButton);
+            SetSize(father.allMatchButton,36,60);
             return ho;
 
         }
-        public void RefreshState(bool b)
+        public YKLayout RemoveItem(PlanLayout father)
         {
-            if(allMatchObject == null)
+            YKHorizontal ho = father.Horizontal();
+            ho.Button("Delete", () =>
             {
-                return;
-            }
-            allMatchObject.SetActive(b);
+                Remove(father);
+            });
+            return ho;
+        }
+        public YKLayout PlanItem(YKLayout father)
+        {
+            PlanLayout ho = CreatePlanLayout(father.GetComponent<Transform>());
+            IsActiveItem(ho);
+            ho.Spacer(1, 35);
+            keyWordItem(ho);
+            ho.Spacer(1, 20);
+            FilterMdoeItem(ho);
+            ho.Spacer(1, 40);
+            ho.allMatchObject = IsAllMatchItem(ho).gameObject;
+            ho.spacerObject = ho.Spacer(1, 60).gameObject;
+            ho.Spacer(1, 40);
+            RemoveItem(ho);
+            ho.RefreshState(ho.isShowIsAllMatch);
+            planeList.Add(ho);
+            return ho;
         }
         public void SetSize( Component com,float h = 36,float w =100)
         {
             com.Rect().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
             com.GetOrCreate<LayoutElement>().preferredWidth = w;
-        }
-        public void UIInputSet(string text, Action<string> onInput = null,YKLayout layOut = null)
+        }    
+        public InputField UIInputSet(string text, Action<string> onInput = null,YKLayout layOut = null)
         {
             
             Widget widget = Util.Instantiate<Widget>("UI/Widget/WidgetSearch", this)
@@ -133,10 +165,12 @@ namespace AutoBuy
             Transform d2 = widget.transform.Find("Search Box/ButtonGeneral (1)");
             component.SetParent(layOut.transform);
             widget.transform.DestroyObject();
+            
             d1.DestroyObject();
             d2.DestroyObject();
 
             InputField input = component.Find("InputField").GetComponent<InputField>();
+            
             if (onInput != null)
             {
                 input.onValueChanged.AddListener(value => onInput?.Invoke(value));
@@ -145,16 +179,61 @@ namespace AutoBuy
             input.gameObject.GetComponent<CanvasRenderer>().SetColor(new Color(0.8f, 0.8f, 0.8f, 0.2f));
             input.Find("Text").gameObject.GetComponent<Text>().color = new Color(0.28f, 0.22f, 0.13f, 1f);
             component.Rect().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 40f);
-            component.GetOrCreate<LayoutElement>().preferredWidth = 150f;
-            return;
+            component.GetOrCreate<LayoutElement>().preferredWidth = 125f;
+            return input;
         }
-    }
+        public PlanLayout CreatePlanLayout(Transform fahter)
+        {
+            PlanLayout layout = YK.Create<PlanLayout>(fahter);
+            layout.OnLayout();
+            return layout;
+        }
+        public void AddPlan()
+        {
+            PlanData newData = new PlanData();
+            AutoBuy.configeData.planList.Add(newData);
+            RefreshList();
+            RefreshAddButton();
+        }
+        public void Remove(PlanLayout planLayout)
+        {
+            AutoBuy.configeData.planList.Remove(planLayout.data);
+            RefreshList();
+            RefreshAddButton();
+        }
+        public void RefreshList()
+        {
+            foreach (PlanLayout item in planeList)
+            {
+                item.gameObject.SetActive(false);
+                item.data = null;
+            }
+            for(int i = 0; i < AutoBuy.configeData.planList.Count; i++)
+            {
+                if (i > planCount-1) {UDebug.Log("大于了列表设置上限"); break; }
+                planeList[i].data = AutoBuy.configeData.planList[i];
+                planeList[i].UIUpdata(AutoBuy.configeData.planList[i]);
+                planeList[i].gameObject.SetActive(true);
+            }
+        }
+        public void RefreshAddButton()
+        {
+            if (AutoBuy.configeData.planList.Count >=10)
+            {
+                addButtonObject.SetActive(false);
+            }
+            else
+            {
+                addButtonObject.SetActive(true);
+            }
+        }
 
+    }
     public class ConfigData
     {
         public bool isGuide = true;
         public int rerollNum = 0;
-        public List<PlanData> palnList = new List<PlanData>();
+        public List<PlanData> planList = new List<PlanData>();
     }
     public class PlanData
     {
@@ -163,5 +242,74 @@ namespace AutoBuy
         public bool isAllMatch = false;
         public bool isActive = true;
     }
+    
+    public class PlanLayout : YKHorizontal
+    {
+        public PlanData data;
 
+        public InputField keyWordInput;
+        public UIDropdown drop;
+        public UIButton allMatchButton;
+        public UIButton activeButton;
+
+        public GameObject allMatchObject;
+        public GameObject spacerObject;
+        public bool isShowIsAllMatch  = false;
+
+        public void UIUpdata(PlanData data)
+        {
+            keyWordInput.text = data.keyword;
+            drop.value = (int)data.filterMdoe;
+            if ((int)data.filterMdoe == 1)
+            {
+                isShowIsAllMatch = true;
+            }
+            else
+            {
+                isShowIsAllMatch = false;
+            }
+            RefreshState(isShowIsAllMatch);
+            allMatchButton.SetCheck(data.isAllMatch);
+            activeButton.SetCheck(data.isActive);
+        }
+        public void OnKeyWordInput(string value)
+        {
+            data.keyword = value;
+        }
+        public void OnDrop(int v)
+        {
+            data.filterMdoe = (AutoBuy.FilterMdoe)v;
+            if (v == 1)
+            {
+                isShowIsAllMatch = true;
+            }
+            else
+            {
+                isShowIsAllMatch = false;
+            }
+            RefreshState(isShowIsAllMatch);
+        }
+        public void OnAllMatchButton(bool b)
+        {
+            if(data == null)
+            {
+                UDebug.Log("data为空");
+            }
+            data.isAllMatch = b;
+        }
+        public void OnActiveButton(bool b)
+        {
+            data.isActive = b;
+        }
+        public void RefreshState(bool b)
+        {
+            if (allMatchObject == null)
+            {
+                return;
+            }
+            spacerObject.SetActive(!b);
+            allMatchObject.SetActive(b);
+        }
+        
+    }
 }
