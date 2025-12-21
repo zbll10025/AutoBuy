@@ -5,29 +5,28 @@ using UnityEngine;
 using UnityEngine.UI;
 using YKF;
 using static AutoBuy.AutoBuy;
+using static BGMData;
 using static System.Net.Mime.MediaTypeNames;
+using static UnityEngine.UI.CanvasScaler;
 using Text = UnityEngine.UI.Text;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
 {
-    public class ConfigUI:MonoBehaviour
-    {
-       
-    }
     public class ConfigLayer : YKLayer<object>
     {
         public Button closeButton;
+        public CustomTab settingTab;
         public override Rect Bound { get; } = new Rect(0, 0, 700, 700);
         public override void OnLayout()
         {
-            CustomTab tab =  CreateTab<CustomTab>("AuotoBuySetting", "setting1");
+             settingTab =  CreateTab<CustomTab>("AuotoBuySetting", "setting1");
         }
-        public static void CreateLayer(AutoBuy autoBuy)
+        public static void CreateLayer()
         {
-            YK.CreateLayer<ConfigLayer>();
+           ConfigLayer layer = YK.CreateLayer<ConfigLayer>();
+            AutoBuy.layer = layer;
+            return ;
         }
-
-        
 
     }
     public class CustomTab : YKLayout<object>
@@ -35,26 +34,18 @@ namespace AutoBuy
         public List<string> filterList = new List<string> { "Default", "Name", "Detail", "Tags", "Element" , "StockNum" };
         public const float textWidth = 110;
         public const float valueWidth = 150;
-        public const int planCount = 10;
+        public const int planCount = 100;
         public List<PlanLayout> planeList = new List<PlanLayout>();
         public GameObject addButtonObject;
-        
+        public ScrollRect scrollRect;
         public override void OnLayout()
         {
-            YKLayout mainLayout = this.Vertical();
+            Init();
+            YKLayout mainLayout = this;
             RerollNumItem(mainLayout);
             IsGuideItem(mainLayout);
-            //ItemNameItem(mainLayout);
             Header(mainLayout);
-            for (int i = 0; i < planCount; i++)
-            {
-                PlanItem(mainLayout).gameObject.SetActive(false);
-            }
-            addButtonObject = mainLayout.Button("Add", () =>
-            {
-                AddPlan();
-            }).gameObject;
-            RefreshList();
+            StaticBuild();
         }
         public YKLayout RerollNumItem(YKLayout father)
         {
@@ -85,17 +76,25 @@ namespace AutoBuy
             ho.Header("FilterMdoe");
             ho.Spacer(1, 40);
             ho.Header("IsAllMatch");
-            ho.Spacer(1, 120);
+            YKVertical verticalButtonLayout = ho.Vertical();
+            UIButton deleteAllButton = ho.Button("DeleteAll", () => { RemoveAll(); });
+            SetSize(deleteAllButton, 50, 100);
+            ho.Spacer(1, 30);
             return ho;
         }
         public YKLayout IsActiveItem(PlanLayout father)
         {
             YKHorizontal ho = father.Horizontal();
-            father.activeButton=ho.Toggle("", isOn: true, onClick:father.OnActiveButton);
+            father.activeButton=ho.Toggle((father.id+1).ToString(), isOn: true, onClick:father.OnActiveButton);
+            float offset = 20;
+            Transform textTransform = father.activeButton.mainText.transform;
+            Transform imageTransform = father.activeButton.transform.Find("Image");
+            textTransform.position -= Vector3.right * offset*2;
+            imageTransform.position+= Vector3.right * offset*1.2f;
             SetSize(father.activeButton, 36, 60);
             return ho;
         }
-        public YKLayout keyWordItem(PlanLayout father)
+     public YKLayout keyWordItem(PlanLayout father)
         {
             YKHorizontal ho = father.Horizontal();
             //var text = ho.Text("keyWord", color: FontColor.DontChange);
@@ -132,9 +131,11 @@ namespace AutoBuy
             });
             return ho;
         }
-        public YKLayout PlanItem(YKLayout father)
+        public YKLayout PlanItem(YKLayout father,int id)
         {
             PlanLayout ho = CreatePlanLayout(father.GetComponent<Transform>());
+            ho.SetId(id);
+
             IsActiveItem(ho);
             ho.Spacer(1, 35);
             keyWordItem(ho);
@@ -193,13 +194,52 @@ namespace AutoBuy
             PlanData newData = new PlanData();
             AutoBuy.configeData.planList.Add(newData);
             RefreshList();
-            RefreshAddButton();
+            /*AutoBuy.ReBuildUI();*/
+            AutoBuy.layer.settingTab.scrollRect.normalizedPosition = Vector3.zero;
+            
         }
         public void Remove(PlanLayout planLayout)
         {
             AutoBuy.configeData.planList.Remove(planLayout.data);
+            /*AutoBuy.ReBuildUI();*/
             RefreshList();
-            RefreshAddButton();
+        }
+        public void RemoveAll()
+        {
+            AutoBuy.configeData.planList.Clear();
+            /*AutoBuy.ReBuildUI();*/
+            RefreshList();
+        }
+        public void StaticBuild()
+        {
+            for (int i = 0; i < planCount; i++)
+            {
+                PlanLayout planLayout = PlanItem(this, i) as PlanLayout;
+                planLayout.gameObject.SetActive(false);
+            }
+            this.Spacer(5, 1);
+            addButtonObject = this.Button("Add", () =>
+            {
+                AddPlan();
+            }).gameObject;
+            this.Spacer(70, 1);
+            RefreshList();
+        }
+        public void Build()
+        {
+            for (int i = 0; i < AutoBuy.configeData.planList.Count; i++)
+            {
+                PlanLayout item = PlanItem(this, i) as PlanLayout;
+                item.data = AutoBuy.configeData.planList[i];
+                item.UIUpdata(item.data);
+
+            }
+
+            addButtonObject = this.Button("Add", () =>
+            {
+                AddPlan();
+            }).gameObject;
+            this.Spacer(20, 1);
         }
         public void RefreshList()
         {
@@ -215,10 +255,11 @@ namespace AutoBuy
                 planeList[i].UIUpdata(AutoBuy.configeData.planList[i]);
                 planeList[i].gameObject.SetActive(true);
             }
+            RefreshAddButton();
         }
         public void RefreshAddButton()
         {
-            if (AutoBuy.configeData.planList.Count >=10)
+            if (AutoBuy.configeData.planList.Count >=planCount)
             {
                 addButtonObject.SetActive(false);
             }
@@ -227,7 +268,16 @@ namespace AutoBuy
                 addButtonObject.SetActive(true);
             }
         }
-
+        public void GetScroll()
+        {
+            Transform t = transform.parent.parent.parent;
+            scrollRect = t.GetComponent<ScrollRect>();
+            //if (scrollRect != null) { UDebug.Log("成功"); }
+        }
+        public void Init()
+        {
+            GetScroll();
+        }
     }
     public class ConfigData
     {
@@ -245,6 +295,7 @@ namespace AutoBuy
     
     public class PlanLayout : YKHorizontal
     {
+        public int id;
         public PlanData data;
 
         public InputField keyWordInput;
@@ -256,6 +307,10 @@ namespace AutoBuy
         public GameObject spacerObject;
         public bool isShowIsAllMatch  = false;
 
+        public void SetId(int i)
+        {
+            id = i;
+        }
         public void UIUpdata(PlanData data)
         {
             keyWordInput.text = data.keyword;

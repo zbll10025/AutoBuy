@@ -1,16 +1,18 @@
 ﻿using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using YKF;
 using UDebug = UnityEngine.Debug;
-using Newtonsoft.Json;
 namespace AutoBuy
 {
     [BepInPlugin("me.acc.plugin.AutoBuy", "AutoBuy", "1.0.0")]
     public class AutoBuy:BaseUnityPlugin
     {
+        public static ConfigLayer layer;
 
         public static List<ButtonGrid> guidButtons = new List<ButtonGrid>();
         public static UIInventory uIInventory;
@@ -21,7 +23,6 @@ namespace AutoBuy
         public static bool pause = true;
         public static int count = 0;
         public static int rerollNum = 0;
-        
         public enum FilterMdoe
         {
             Default,
@@ -42,25 +43,29 @@ namespace AutoBuy
         {
             if (Input.GetKeyDown(uiKeyCode.Value))
             {
-                ConfigLayer.CreateLayer(this);
+                 ConfigLayer.CreateLayer();
             }
         }
         private void OnApplicationQuit()
         {
             JsonHelper.Save<ConfigData>(configeData, "AutoBuy.json");
         }
-        //[HarmonyPostfix, HarmonyPatch(typeof(InvOwner), "OnRightClick", new Type[]{
-        //    typeof( ButtonGrid )
-        //})]
-        //public static void InvOwner_OnRightClick_Post(ButtonGrid button)
-        //{
-        //    //foreach (var item in guidButtons)
-        //    //{
-        //    //    if(item == null) {  continue; }
-        //    //    Buy(item);
-        //    //}
+/*        [HarmonyPostfix, HarmonyPatch(typeof(InvOwner), "OnRightClick", new Type[]{
+            typeof( ButtonGrid )
+        })]
+        public static void InvOwner_OnRightClick_Post(ButtonGrid button)
+        {
+            *//*foreach (var item in guidButtons)
+            {
+                if(item == null) {  continue; }
+                Buy(item);
+            }*//*
+            if (button.card.trait is TraitGene)
+            {
+                GeneWriteNote(button.card.trait);
+            }
 
-        //}
+        }*/
 
         [HarmonyPostfix, HarmonyPatch(typeof(LayerInventory), "CreateBuy", new Type[]{
             typeof( Card ),
@@ -447,6 +452,7 @@ namespace AutoBuy
                 listTrait = list;
             }
             string stockNum = "";
+            string geneElemntText = "";
             if (flag2)
             {
                 //是武器装备的附魔文本
@@ -480,12 +486,17 @@ namespace AutoBuy
                         //    return s;
                         //}
                         Card root = t.GetRootCard();
-                        int num4 = e.Value;
+                        //int num4 = e.Value; 
+                        int num3 = e.Value;
                         if (e.source.IsWeaponEnc && !e.source.tag.Contains("modRanged") && t.isEquipped && root.isChara)
                         {
-                            num4 = num4 * (100 + AttackProcess.GetTwoHandEncBonus(root.Chara)) / 100;
+                            int num4 = e.id;
+                            if (num4 != 482 && (uint)(num4 - 660) > 2u && num4 != 666)
+                            {
+                                num3 = num3 * (100 + AttackProcess.GetTwoHandEncBonus(root.Chara, t)) / 100;
+                            }
                         }
-                        string text16 = " (" + e.Value + ((e.Value == num4) ? "" : (" → " + num4)) + ")";
+                        string text16 = " (" + e.Value + ((e.Value == num3) ? "" : (" → " + num3)) + ")";
                         string text17 = "_bracketLeft３".lang() + e.Name + "_bracketRight３".lang();
                         return s + text16 + " " + text17;
                     });
@@ -532,6 +543,11 @@ namespace AutoBuy
                     });
                 }
                     
+            }
+            if (t.trait is TraitGene)
+            {
+                geneElemntText = GeneWriteNote(t.trait);
+                elementsText += geneElemntText;
             }
             return new ItemInfo(nameText, detailText, tagText,elementsText,stockNum);
         }
@@ -722,6 +738,23 @@ namespace AutoBuy
             tagText = tagText + r;
             return tagText;
         }
+        public static string GeneWriteNote(Trait trait){
+
+            DNA dna = trait.owner.c_DNA;
+            SourceChara.Row row = EClass.sources.charas.map.TryGetValue(dna.id);
+            string dnaText = "";
+            if(dna.type == DNA.Type.Brain)
+            {
+                if (row != null)
+                {
+                    string key = row.tactics.IsEmpty(EClass.sources.tactics.map.TryGetValue(row.id)?.id ?? EClass.sources.tactics.map.TryGetValue(row.job)?.id ?? "predator");
+                    dnaText = "gene_info".lang(EClass.sources.tactics.map[key].GetName().ToTitleCase(), "");
+                    //UDebug.Log(dnaText);
+                }
+
+            }
+            return dnaText;
+        }
         #endregion
         #region 购买物品
         public static void StartAuto()
@@ -854,6 +887,11 @@ namespace AutoBuy
         }
         #endregion
         
+        public static void ReBuildUI()
+        {
+            EMono.ui.RemoveLayer(layer);
+            ConfigLayer.CreateLayer();
+        }
     }
     public class ItemInfo
     {
