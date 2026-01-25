@@ -19,7 +19,7 @@ namespace AutoBuy
         public override Rect Bound { get; } = new Rect(0, 0, 700, 700);
         public override void OnLayout()
         {
-             settingTab =  CreateTab<CustomTab>("AuotoBuySetting", "setting1");
+             settingTab =  CreateTab<CustomTab>("AutoBuySetting", "setting1");
         }
         public static void CreateLayer()
         {
@@ -183,9 +183,9 @@ namespace AutoBuy
             component.GetOrCreate<LayoutElement>().preferredWidth = 125f;
             return input;
         }
-        public PlanLayout CreatePlanLayout(Transform fahter)
+        public PlanLayout CreatePlanLayout(Transform father)
         {
-            PlanLayout layout = YK.Create<PlanLayout>(fahter);
+            PlanLayout layout = YK.Create<PlanLayout>(father);
             layout.OnLayout();
             return layout;
         }

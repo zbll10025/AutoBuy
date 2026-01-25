@@ -50,22 +50,15 @@ namespace AutoBuy
         {
             JsonHelper.Save<ConfigData>(configeData, "AutoBuy.json");
         }
-/*        [HarmonyPostfix, HarmonyPatch(typeof(InvOwner), "OnRightClick", new Type[]{
+        [HarmonyPostfix, HarmonyPatch(typeof(InvOwner), "OnRightClick", new Type[]{
             typeof( ButtonGrid )
         })]
         public static void InvOwner_OnRightClick_Post(ButtonGrid button)
         {
-            *//*foreach (var item in guidButtons)
-            {
-                if(item == null) {  continue; }
-                Buy(item);
-            }*//*
-            if (button.card.trait is TraitGene)
-            {
-                GeneWriteNote(button.card.trait);
-            }
+           ItemInfo info =  GetThingInfo(button.card as Thing);
+            UDebug.Log(info.elements);
 
-        }*/
+        }
 
         [HarmonyPostfix, HarmonyPatch(typeof(LayerInventory), "CreateBuy", new Type[]{
             typeof( Card ),
