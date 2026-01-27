@@ -107,6 +107,7 @@
     <Compile Include="AutoBuy.cs" />
     <Compile Include="ConfigUI.cs" />
     <Compile Include="JsonHelper.cs" />
+    <Compile Include="PoolHelp.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

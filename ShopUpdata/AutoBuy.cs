@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Assertions.Must;
 using YKF;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
@@ -43,7 +44,12 @@ namespace AutoBuy
         {
             if (Input.GetKeyDown(uiKeyCode.Value))
             {
-                 ConfigLayer.CreateLayer();
+               ConfigLayer.CreateLayer();
+            }
+
+            if (Input.GetKeyDown(KeyCode.O))
+            {
+                PoolHelp.PreLoadPlanLayout(100);
             }
         }
         private void OnApplicationQuit()
@@ -56,7 +62,7 @@ namespace AutoBuy
         public static void InvOwner_OnRightClick_Post(ButtonGrid button)
         {
            ItemInfo info =  GetThingInfo(button.card as Thing);
-            UDebug.Log(info.elements);
+            info.DeBugLog();
 
         }
 
@@ -158,6 +164,7 @@ namespace AutoBuy
             //bool flag2 = (t as Card).IsIdentified || flag ;
             bool flag2 = true;
             text3 = c.Name;
+            string nameSimpleText = c.NameSimple;
             string nameText = text3;
             //数量与重量
             string text5 = c.Num.ToFormat() ?? "";
@@ -542,7 +549,7 @@ namespace AutoBuy
                 geneElemntText = GeneWriteNote(t.trait);
                 elementsText += geneElemntText;
             }
-            return new ItemInfo(nameText, detailText, tagText,elementsText,stockNum);
+            return new ItemInfo(nameText,nameSimpleText ,detailText, tagText,elementsText,stockNum);
         }
         public static string AddNote(
             Thing t, 
@@ -770,7 +777,8 @@ namespace AutoBuy
                         switch (i.filterMdoe)
                         {
                             case FilterMdoe.Name:
-                                if (IsMatch(itemInfo.name, i.keyword, isNormal: true, isall: i.isAllMatch))
+                                
+                                if (IsMatch(i.isAllMatch?itemInfo.nameSimple:itemInfo.name , i.keyword, isall: i.isAllMatch))
                                 {
                                 AddToButtonGrid(item);
                                 }
@@ -810,29 +818,20 @@ namespace AutoBuy
 
                 }
         }
-        public static bool IsMatch(string text, string keyword,bool isNormal = false,bool isall = false)
+        public static bool IsMatch(string text, string keyword,bool isall = false)
         {
 
             if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword))
                 return false;
-            if (isNormal)
-            {
-               
-                text = text.Trim();
-                keyword = keyword.Trim();
-                char[] delims = new char[] { '（', '(', '[', ' ' };
-                string prefix = text.Split(delims, 2)[0].Trim();
+           
                 if (isall) 
                 { 
-                    return string.Equals(prefix, keyword, StringComparison.OrdinalIgnoreCase);
+                    return string.Equals(text, keyword, StringComparison.OrdinalIgnoreCase);
                 } 
                 else
                 {
-                    return prefix.Contains(keyword); 
+                    return text.Contains(keyword); 
                 }
-
-            }
-            return text.Contains(keyword); 
         }
         public static bool Buy(ButtonGrid button)
         {
@@ -885,23 +884,37 @@ namespace AutoBuy
             EMono.ui.RemoveLayer(layer);
             ConfigLayer.CreateLayer();
         }
+       
     }
     public class ItemInfo
     {
         public string name;
+        public string nameSimple;
         public string detail;
         public string tags;
         public string elements;
         public string allText;
         public string stockNum;
-        public ItemInfo(string name,string detail,string tags,string elements,string stockNum)
+        public ItemInfo(string name,string nameSimple,string detail,string tags,string elements,string stockNum)
         {
             this.name = name;
+            this.nameSimple = nameSimple;
             this.detail = detail;
             this.tags = tags;
             this.elements = elements;
             this.allText = name + detail + tags + elements;
             this.stockNum = stockNum;
+        }
+
+        public void DeBugLog()
+        {
+            UDebug.Log("-------------------------------ItemInfo-----------------------------");
+            UDebug.Log("name:" + name);
+            UDebug.Log("nameSimple:" + nameSimple);
+            UDebug.Log("detail:" + detail);
+            UDebug.Log("tags:" + tags);
+            UDebug.Log("elements:" + elements);
+            UDebug.Log("stockNum:" + stockNum);
         }
     }
 }

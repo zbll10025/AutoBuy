@@ -8,6 +8,7 @@ using static AutoBuy.AutoBuy;
 using static BGMData;
 using static System.Net.Mime.MediaTypeNames;
 using static UnityEngine.UI.CanvasScaler;
+using static UnityEngine.UI.Image;
 using Text = UnityEngine.UI.Text;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
@@ -23,7 +24,15 @@ namespace AutoBuy
         }
         public static void CreateLayer()
         {
-           ConfigLayer layer = YK.CreateLayer<ConfigLayer>();
+            // 检查是否已经存在 ConfigLayer 实例
+            ConfigLayer val = EMono.ui.layers.Find((Layer o) => o.GetType() == typeof(ConfigLayer)) as ConfigLayer;
+            if (val != null)
+            {
+                val.gameObject.SetActive(true);
+                return;
+            }
+
+            ConfigLayer layer = YK.CreateLayer<ConfigLayer>();
             AutoBuy.layer = layer;
             return ;
         }
@@ -35,6 +44,7 @@ namespace AutoBuy
         public const float textWidth = 110;
         public const float valueWidth = 150;
         public const int planCount = 100;
+
         public List<PlanLayout> planeList = new List<PlanLayout>();
         public GameObject addButtonObject;
         public ScrollRect scrollRect;
@@ -94,7 +104,7 @@ namespace AutoBuy
             SetSize(father.activeButton, 36, 60);
             return ho;
         }
-     public YKLayout keyWordItem(PlanLayout father)
+        public YKLayout keyWordItem(PlanLayout father)
         {
             YKHorizontal ho = father.Horizontal();
             //var text = ho.Text("keyWord", color: FontColor.DontChange);
@@ -131,7 +141,7 @@ namespace AutoBuy
             });
             return ho;
         }
-        public YKLayout PlanItem(YKLayout father,int id)
+        public YKLayout PlanItem(int id, YKLayout father = null)
         {
             PlanLayout ho = CreatePlanLayout(father.GetComponent<Transform>());
             ho.SetId(id);
@@ -147,7 +157,8 @@ namespace AutoBuy
             ho.Spacer(1, 40);
             RemoveItem(ho);
             ho.RefreshState(ho.isShowIsAllMatch);
-            planeList.Add(ho);
+
+            //planeList.Add(ho);
             return ho;
         }
         public void SetSize( Component com,float h = 36,float w =100)
@@ -214,7 +225,9 @@ namespace AutoBuy
         {
             for (int i = 0; i < planCount; i++)
             {
-                PlanLayout planLayout = PlanItem(this, i) as PlanLayout;
+                //PlanLayout planLayout = PlanItem(i,this) as PlanLayout; 
+                PlanLayout planLayout = PoolHelp.SpawnPlanLayout(this.transform,i);
+                planeList.Add(planLayout);
                 planLayout.gameObject.SetActive(false);
             }
             this.Spacer(5, 1);
@@ -229,7 +242,7 @@ namespace AutoBuy
         {
             for (int i = 0; i < AutoBuy.configeData.planList.Count; i++)
             {
-                PlanLayout item = PlanItem(this, i) as PlanLayout;
+                PlanLayout item = PlanItem(i, this) as PlanLayout;
                 item.data = AutoBuy.configeData.planList[i];
                 item.UIUpdata(item.data);
 
@@ -248,9 +261,9 @@ namespace AutoBuy
                 item.gameObject.SetActive(false);
                 item.data = null;
             }
-            for(int i = 0; i < AutoBuy.configeData.planList.Count; i++)
+            for (int i = 0; i < AutoBuy.configeData.planList.Count; i++)
             {
-                if (i > planCount-1) {UDebug.Log("大于了列表设置上限"); break; }
+                if (i > planCount - 1) { UDebug.Log("大于了列表设置上限"); break; }
                 planeList[i].data = AutoBuy.configeData.planList[i];
                 planeList[i].UIUpdata(AutoBuy.configeData.planList[i]);
                 planeList[i].gameObject.SetActive(true);
