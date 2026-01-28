@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Xml.Serialization;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Windows;
 using YKF;
 using static AutoBuy.AutoBuy;
 using static BGMData;
@@ -135,10 +136,10 @@ namespace AutoBuy
         public YKLayout RemoveItem(PlanLayout father)
         {
             YKHorizontal ho = father.Horizontal();
-            ho.Button("Delete", () =>
-            {
-                Remove(father);
-            });
+            father.deleteButton =  ho.Button("Delete", () =>
+                                {
+                                    Remove(father);
+                                });
             return ho;
         }
         public YKLayout PlanItem(int id, YKLayout father = null)
@@ -225,8 +226,9 @@ namespace AutoBuy
         {
             for (int i = 0; i < planCount; i++)
             {
-                //PlanLayout planLayout = PlanItem(i,this) as PlanLayout; 
-                PlanLayout planLayout = PoolHelp.SpawnPlanLayout(this.transform,i);
+                PlanLayout planLayout = PlanItem(i,this) as PlanLayout; 
+                //PlanLayout planLayout = PoolHelp.SpawnPlanLayout(this.transform,i);
+                planLayout.ReBindUiEvent(this);
                 planeList.Add(planLayout);
                 planLayout.gameObject.SetActive(false);
             }
@@ -318,8 +320,10 @@ namespace AutoBuy
 
         public GameObject allMatchObject;
         public GameObject spacerObject;
-        public bool isShowIsAllMatch  = false;
 
+        public UIButton deleteButton;
+        public bool isShowIsAllMatch  = false;
+       
         public void SetId(int i)
         {
             id = i;
@@ -379,5 +383,21 @@ namespace AutoBuy
             allMatchObject.SetActive(b);
         }
         
+        public void ReBindUiEvent(CustomTab tab)
+        {
+            activeButton.SetToggle(true, this.OnActiveButton);
+            activeButton.mainText.text = (id+1).ToString().lang().ToTitleCase();
+
+            keyWordInput.onValueChanged.RemoveAllListeners();
+            keyWordInput.onValueChanged.AddListener(this.OnKeyWordInput);
+
+            drop.onValueChanged.RemoveAllListeners();
+            drop.onValueChanged.AddListener(this.OnDrop);
+
+            allMatchButton.SetToggle(false, this.OnAllMatchButton);
+
+            deleteButton.onClick.RemoveAllListeners();
+            deleteButton.onClick.AddListener(() => { SE.ClickGeneral(); ; tab.Remove(this); });
+        }
     }
 }

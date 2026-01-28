@@ -39,6 +39,7 @@ namespace AutoBuy
             Harmony.CreateAndPatchAll(typeof(AutoBuy));
             configeData = JsonHelper.Load<ConfigData>(new ConfigData() ,"AutoBuy.json");
             uiKeyCode = Config.Bind<KeyCode>("config", "UIKeyCode", KeyCode.P, "模组设置界面的按键/Mod Configuration Buttons");
+            //PoolHelp.PreLoadPlanLayout(100);
         }
         void Update()
         {
@@ -47,10 +48,10 @@ namespace AutoBuy
                ConfigLayer.CreateLayer();
             }
 
-            if (Input.GetKeyDown(KeyCode.O))
-            {
-                PoolHelp.PreLoadPlanLayout(100);
-            }
+            //if (Input.GetKeyDown(KeyCode.O))
+            //{
+            //    PoolHelp.PreLoadPlanLayout(100);
+            //}
         }
         private void OnApplicationQuit()
         {
