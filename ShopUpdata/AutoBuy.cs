@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.Assertions.Must;
 using YKF;
 using UDebug = UnityEngine.Debug;
+using System.Diagnostics;
 namespace AutoBuy
 {
     [BepInPlugin("me.acc.plugin.AutoBuy", "AutoBuy", "1.0.0")]
@@ -24,6 +25,8 @@ namespace AutoBuy
         public static bool pause = true;
         public static int count = 0;
         public static int rerollNum = 0;
+        public static Stopwatch sw = null;
+        private static bool _isRerolling = false; // 添加全局锁
         public enum FilterMdoe
         {
             Default,
@@ -87,6 +90,10 @@ namespace AutoBuy
         })]
         public static void LayerInventory_TryShowGuide_Postfix(List<ButtonGrid> list)
         {
+            if (_isRerolling)
+            {
+                return;
+            }
             bool flag = InvOwner.HasTrader && InvOwner.Trader.UseGuide;
             if (flag)
             {
@@ -103,12 +110,12 @@ namespace AutoBuy
             {
                 Thing thing = button.card as Thing;
                 if (thing == null) continue;
-                   
+
                 if (guidButtons.Contains(button))
                 {
                     if (configeData.isGuide)
                     {
-                      button.Attach("guide", rightAttach: false);
+                        button.Attach("guide", rightAttach: false);
                     }
                     if (!pause)
                     {
@@ -119,16 +126,28 @@ namespace AutoBuy
                             return;
                         }
                     }
-                   
+
                 }
 
             }
-            
+
             if (uIInventory != null && !pause)
             {
                 if (rerollNum > 0)
                 {
-                    RerollShop(uIInventory);
+                    _isRerolling = true;
+                    try
+                    {
+                        Stopwatch sw = Stopwatch.StartNew();
+                        RerollShop(uIInventory);
+                        sw.Stop();
+                        Console.WriteLine($"耗时: {sw.ElapsedMilliseconds} ms");
+                    }
+                    finally
+                    {
+                        _isRerolling = false; // 解锁，即使出错也要解锁
+                        LayerInventory_TryShowGuide_Postfix(ConvertButtonList(uIInventory.list));
+                    }
                 }
                 else
                 {
@@ -760,6 +779,7 @@ namespace AutoBuy
         #region 购买物品
         public static void StartAuto()
         {
+             sw = Stopwatch.StartNew();
             if (uIInventory == null) { return; }
             rerollNum = configeData.rerollNum;
             pause = false;
@@ -877,6 +897,20 @@ namespace AutoBuy
                 guidButtons.Add(b);
             }
             
+        }
+
+        public static List<ButtonGrid> ConvertButtonList(UIList list)
+        {
+            List<ButtonGrid> list2 = new List<ButtonGrid>();
+            foreach (UIList.ButtonPair button in list.buttons)
+            {
+                ButtonGrid buttonGrid = button.component as ButtonGrid;
+                if ((bool)buttonGrid)
+                {
+                    list2.Add(buttonGrid);
+                }
+            }
+            return list2;
         }
         #endregion
         
