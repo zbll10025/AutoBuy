@@ -105,7 +105,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AutoBuy.cs" />
+    <Compile Include="BuyHelp.cs" />
     <Compile Include="ConfigUI.cs" />
+    <Compile Include="CoroutineRunner.cs" />
     <Compile Include="JsonHelper.cs" />
     <Compile Include="PoolHelp.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

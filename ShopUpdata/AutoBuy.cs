@@ -3,12 +3,15 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.Assertions.Must;
+using UnityEngine.UI;
 using YKF;
+using static ActPlan;
 using UDebug = UnityEngine.Debug;
-using System.Diagnostics;
 namespace AutoBuy
 {
     [BepInPlugin("me.acc.plugin.AutoBuy", "AutoBuy", "1.0.0")]
@@ -16,7 +19,7 @@ namespace AutoBuy
     {
         public static ConfigLayer layer;
 
-        public static List<ButtonGrid> guidButtons = new List<ButtonGrid>();
+        public static List<Thing> matchThings = new List<Thing>();
         public static UIInventory uIInventory;
 
         public static ConfigData configeData;
@@ -26,7 +29,7 @@ namespace AutoBuy
         public static int count = 0;
         public static int rerollNum = 0;
         public static Stopwatch sw = null;
-        private static bool _isRerolling = false; // 添加全局锁
+        public static int tempCount = 0;
         public enum FilterMdoe
         {
             Default,
@@ -65,8 +68,8 @@ namespace AutoBuy
         })]
         public static void InvOwner_OnRightClick_Post(ButtonGrid button)
         {
-           ItemInfo info =  GetThingInfo(button.card as Thing);
-            info.DeBugLog();
+            // ItemInfo info =  GetThingInfo(button.card as Thing);
+            //info.DeBugLog();
 
         }
 
@@ -90,73 +93,29 @@ namespace AutoBuy
         })]
         public static void LayerInventory_TryShowGuide_Postfix(List<ButtonGrid> list)
         {
-            if (_isRerolling)
-            {
-                return;
-            }
-            bool flag = InvOwner.HasTrader && InvOwner.Trader.UseGuide;
-            if (flag)
-            {
-                return;
-            }
-            if (list == null || list.Count <= 0) return;
-            if (!(list[0]?.invOwner is InvOwnerShop shop))
-            {
-                return;
-            }
-            guidButtons.Clear();
-            SearchItems(list);
+            if (!pause) { return; }
+            if(uIInventory == null) { return; }
+            var things = uIInventory.owner.owner.things.Find("chest_merchant").things;
+            if (things == null || things.Count <= 0) {  return; }
+            matchThings.Clear();
+            SearchItems(things);
             foreach (ButtonGrid button in list)
             {
                 Thing thing = button.card as Thing;
                 if (thing == null) continue;
 
-                if (guidButtons.Contains(button))
+                if (matchThings.Contains(thing))
                 {
                     if (configeData.isGuide)
                     {
                         button.Attach("guide", rightAttach: false);
                     }
-                    if (!pause)
-                    {
-                        if (!Buy(button))
-                        {
-                            pasueMessage = "购买失败";
-                            pause = true;
-                            return;
-                        }
-                    }
 
                 }
 
             }
-
-            if (uIInventory != null && !pause)
-            {
-                if (rerollNum > 0)
-                {
-                    _isRerolling = true;
-                    try
-                    {
-                        Stopwatch sw = Stopwatch.StartNew();
-                        RerollShop(uIInventory);
-                        sw.Stop();
-                        Console.WriteLine($"耗时: {sw.ElapsedMilliseconds} ms");
-                    }
-                    finally
-                    {
-                        _isRerolling = false; // 解锁，即使出错也要解锁
-                        LayerInventory_TryShowGuide_Postfix(ConvertButtonList(uIInventory.list));
-                    }
-                }
-                else
-                {
-                    pause = true;
-                }
-
-            }
+            return;
         }
-
         [HarmonyPostfix, HarmonyPatch(typeof(UIInventory), "RefreshMenu")]
         public static void UIInventory_RefreshMenu_Postfix(UIInventory __instance)
         {
@@ -779,19 +738,100 @@ namespace AutoBuy
         #region 购买物品
         public static void StartAuto()
         {
-             sw = Stopwatch.StartNew();
+            count = 0;
+            tempCount = 0;
+            sw = Stopwatch.StartNew();
             if (uIInventory == null) { return; }
             rerollNum = configeData.rerollNum;
             pause = false;
-            LayerInventory.TryShowGuide(uIInventory.list);
+            CoroutineRunner.StartStaticCoroutine(AutoBuyMainRoutine());
+            //AutoBuyMain();
+            //LayerInventory.TryShowGuide(uIInventory.list);
         }
-        public static void SearchItems(List<ButtonGrid> list)
-        {        
-                foreach (ButtonGrid item in list)
+
+        private static IEnumerator AutoBuyMainRoutine()
+        {
+            while (!pause)
+            {
+                var things = uIInventory?.owner?.owner?.things.Find("chest_merchant")?.things;
+                if (things == null || things.Count <= 0)
                 {
-                    Thing t = item.card as Thing;
+                    // 商店空了，尝试刷新
+                    if (!RerollShop(uIInventory))
+                    {
+                        break;
+                    }
+                    yield return null; // 刷新后等一帧再检查
+                    continue;
+                }
+
+                // 搜索匹配物品
+                matchThings.Clear();                   
+                SearchItems(things);
+
+                // 如果有匹配物品，分批购买
+                if (matchThings.Count > 0)
+                {
+                    // 执行分帧购买（等待它完成）
+                    yield return CoroutineRunner.StartStaticCoroutine(FramingBuy(matchThings, 35));
+                }
+
+                // 购买完成后，刷新商店（如果还有刷新次数）
+                if (rerollNum > 0 && !pause)
+                {
+                    if (!RerollShop(uIInventory))
+                    {
+                        break;
+                    }
+                    yield return null; // 刷新后等一帧
+                }
+                else
+                {
+                    // 没有刷新次数了，退出
+                    break;
+                }
+            }
+
+            // 循环结束，清理
+            sw?.Stop();
+            UDebug.Log($"自动购买结束。总耗时: {sw?.ElapsedMilliseconds ?? 0} ms");
+            Console.WriteLine($"总购买次数: {tempCount} ");
+            Console.WriteLine($"商店刷新次数: {count} ");
+            LayerInventory.SetDirtyAll();
+            pause = true;
+            uIInventory?.RefreshGrid();
+            uIInventory?.Sort();
+        }
+        static IEnumerator FramingBuy(List<Thing> list,int batch)
+        {
+            int count = 0;
+            foreach(Thing t in list)
+            {
+                if (!FastBuy(t, t.Num))
+                {
+                    pasueMessage = "购买失败";
+                    pause = true;
+                    UDebug.Log(pasueMessage);
+                    break;
+
+                }
+                tempCount++;
+                count++;
+                if (count >= batch)
+                {
+                    count = 0;
+                    yield return null; // 等待下一帧
+                }
+            }
+        }
+        public static void SearchItems(List<Thing> list)
+        {        
+                foreach (Thing item in list)
+                {
+                    Thing t = item;
                     if (t == null) continue;
                     ItemInfo itemInfo = GetThingInfo(t);
+                    //UDebug.Log(itemInfo.name);
                     foreach (var i in configeData.planList)
                     {
                         if (!i.isActive) {  continue; }
@@ -801,37 +841,37 @@ namespace AutoBuy
                                 
                                 if (IsMatch(i.isAllMatch?itemInfo.nameSimple:itemInfo.name , i.keyword, isall: i.isAllMatch))
                                 {
-                                AddToButtonGrid(item);
+                                AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.Detail:
                             if (IsMatch(itemInfo.detail, i.keyword))
                                 {
-                                AddToButtonGrid(item);
+                                AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.Tags:
                                 if (IsMatch(itemInfo.tags, i.keyword))
                                 {
-                                    AddToButtonGrid(item);
+                                    AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.Element:
                                 if (IsMatch(itemInfo.elements, i.keyword))
                                 {
-                                    AddToButtonGrid(item);
+                                    AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.StockNum:
                                 if (IsMatch(itemInfo.stockNum, i.keyword))
                                 {
-                                    AddToButtonGrid(item);
+                                    AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.Default:
                                 if (IsMatch(itemInfo.allText, i.keyword))
                                 {
-                                    AddToButtonGrid(item);
+                                    AddToMatchThings(item);
                                 }
                                 break;
                     }
@@ -854,47 +894,162 @@ namespace AutoBuy
                     return text.Contains(keyword); 
                 }
         }
-        public static bool Buy(ButtonGrid button)
+
+        public static bool FastBuy(Thing itemToBuy, int maxQuantity = 1)
         {
-            Card card = button.card;
-            Card card2 = button.invOwner.owner;
-            if (card == null || card2 == null) { return false; }
-            return  new InvOwner.Transaction(button, (InvOwner.HasTrader && !InvOwner.FreeTransfer) ? button.card.Num : card.Num).Process(startTransaction: false);
-           
-        }
-        public static bool RerollShop(UIInventory uIInventory)
-        {
-            
-            Card _owner = uIInventory.owner.owner;
-            int cost = _owner.trait.CostRerollShop;
-            if (EMono._zone.influence < cost)
+            if (itemToBuy == null || maxQuantity <= 0)
             {
-                SE.Beep();
-                Msg.Say("notEnoughInfluence");
-                pause = true;
-                pasueMessage = "名声不足";
+                UDebug.Log("快速购买失败：物品为空 或 购买数量无效（≤0）");
                 return false;
+            }
+
+            InvOwner trader = InvOwner.Trader;
+            InvOwner player = InvOwner.Main;
+
+            if (trader == null || player == null)
+            {
+                UDebug.Log("快速购买失败：商人或玩家的背包持有者（InvOwner）为空");
+                return false;
+            }
+
+            if (itemToBuy.parent != trader.Container)
+            {
+                UDebug.Log($"快速购买失败：物品 '{itemToBuy.id}' 不属于当前商人的容器（当前父容器：）");
+                return false;
+            }
+
+            int buyCount = Math.Min(maxQuantity, itemToBuy.Num);
+            if (buyCount <= 0)
+            {
+                UDebug.Log($"快速购买失败：实际购买数量 ≤ 0（请求：{maxQuantity}，物品库存：{itemToBuy.Num}）");
+                return false;
+            }
+
+            // 获取单价
+            int unitPrice = trader.GetPrice(itemToBuy, trader.currency, 1, sell: false);
+            if (unitPrice <0)
+            {
+                UDebug.Log($"快速购买失败：物品 '{itemToBuy.id}' 的单价无效（≤0），价格为：{unitPrice}");
+                return false;
+            }
+
+            int totalPrice = unitPrice * buyCount;
+
+            // 检查货币是否足够
+            int playerCurrency = EClass.pc.GetCurrency(trader.IDCurrency);
+            if (playerCurrency < totalPrice)
+            {
+                UDebug.Log($"快速购买失败：货币不足。需要 {totalPrice}，当前持有 {playerCurrency}（货币类型：{trader.IDCurrency}）");
+                return false;
+            }
+
+            // ==一次性拆分整批 ===
+            Thing batch = itemToBuy.Split(buyCount);
+            //Thing batch = BuyHelp.MySplit(buyCount,itemToBuy);
+            if (batch == null || batch.isDestroyed || batch.Num != buyCount)
+            {
+                UDebug.Log($"快速购买失败：Split({buyCount}) 返回的物品无效（为空/已销毁/数量不符）。原物品：{itemToBuy.id}（库存：{itemToBuy.Num}）");
+                return false;
+            }
+
+            // 尝试让玩家拾取整批
+            Thing added = EClass.pc.Pick(batch, msg: false);
+            //Thing added = BuyHelp.MyPcPick(batch);
+
+            // 检查是否完整接收
+            if (added == null || added.isDestroyed)
+            {
+                UDebug.Log($"快速购买失败：玩家背包未能完整接收物品。请求数量：{buyCount}，实际接收：{(added?.Num ?? -1)}");
+
+                // 尝试归还物品
+                if (batch != null && !batch.isDestroyed)
+                {
+                    if (batch.parent == null)
+                    {
+                        trader.Container.AddThing(batch);
+                        UDebug.Log("快速购买：已将未接收的物品归还给商人。");
+                    }
+                    else
+                    {
+                        UDebug.Log("快速购买：物品已有父容器，跳过归还操作。");
+                    }
+                }
+                return false;
+            }
+
+            // 成功拾取，扣款
+            EClass.pc.ModCurrency(-totalPrice, trader.IDCurrency);
+            //UDebug.Log($"快速购买成功：购买了 {buyCount} 个 '{itemToBuy.id}'，花费 {totalPrice} {trader.IDCurrency}");
+
+            // 触发交易事件
+            if (ShopTransaction.current != null)
+            {
+                //ShopTransaction.current.Process(added, buyCount, sell: false);
             }
             else
             {
-                UDebug.Log("刷新次数"+count++);      
-                rerollNum--;
-                //UDebug.Log("剩余刷新次数" + rerollNum);
-                SE.Dice();
-                EMono._zone.influence -= cost;
-                _owner.c_dateStockExpire = 0;
-                _owner.trait.OnBarter();
-                uIInventory.RefreshGrid();
-                uIInventory.Sort();
-                SE.Play("shop_open");
-                return true;
+                UDebug.Log("快速购买：当前无商店交易上下文（ShopTransaction.current 为 null），跳过事件处理。");
+            }
+
+            return true;
+        }
+        public static bool Buy(ButtonGrid button)
+        {
+            Card card = button.card;
+            Card card2 = uIInventory.owner.owner;
+            if (card == null || card2 == null) { return false; }
+            return  new InvOwner.Transaction(button, (InvOwner.HasTrader && !InvOwner.FreeTransfer) ? button.card.Num : card.Num).Process(startTransaction: false);
+        }
+        public static bool RerollShop(UIInventory uIInventory)
+        {
+            if (uIInventory != null && !pause)
+            {
+                if (rerollNum > 0)
+                {
+                    Card _owner = uIInventory.owner.owner;
+                    int cost = _owner.trait.CostRerollShop;
+                    if (EMono._zone.influence < cost)
+                    {
+                        SE.Beep();
+                        Msg.Say("notEnoughInfluence");
+                        pause = true;
+                        pasueMessage = "名声不足";
+                        return false;
+                    }
+                    else
+                    {
+                        count++;
+                        rerollNum--;
+                        //UDebug.Log("剩余刷新次数" + rerollNum);
+                        SE.Dice();
+                        EMono._zone.influence -= cost;
+                        _owner.c_dateStockExpire = 0;
+                        _owner.trait.OnBarter();
+                        //uIInventory.RefreshGrid();
+                        //uIInventory.Sort();
+                        //SE.Play("shop_open");
+                        return true;
+                    }
+
+                }
+                else
+                {
+                    pause = true;
+                    return false;
+                }
+
+            }
+            else
+            {
+                pause = true;
+                return false;
             }
         }
-        public static void AddToButtonGrid(ButtonGrid b)
+        public static void AddToMatchThings(Thing b)
         {
-            if (!guidButtons.Contains(b))
+            if (!matchThings.Contains(b))
             {
-                guidButtons.Add(b);
+                matchThings.Add(b);
             }
             
         }
