@@ -6,11 +6,13 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Assertions.Must;
 using UnityEngine.UI;
 using YKF;
 using static ActPlan;
+using static System.Net.Mime.MediaTypeNames;
 using UDebug = UnityEngine.Debug;
 namespace AutoBuy
 {
@@ -68,9 +70,18 @@ namespace AutoBuy
         })]
         public static void InvOwner_OnRightClick_Post(ButtonGrid button)
         {
-            // ItemInfo info =  GetThingInfo(button.card as Thing);
+            ItemInfo info = GetThingInfo(button.card as Thing);
+            string[] parts = info.elements.Split(';');
+            UDebug.Log(info.elements);
+            foreach (var i in parts)
+            {
+                UDebug.Log("IsMatch部分文本：" + i);
+            }
             //info.DeBugLog();
-
+            //foreach (var i in info.nameValue)
+            //{
+            //    UDebug.Log(i);
+            //}
         }
 
         [HarmonyPostfix, HarmonyPatch(typeof(LayerInventory), "CreateBuy", new Type[]{
@@ -143,7 +154,7 @@ namespace AutoBuy
             //bool flag2 = (t as Card).IsIdentified || flag ;
             bool flag2 = true;
             text3 = c.Name;
-            string nameSimpleText = c.NameSimple;
+            string nameSimpleText = c.NameSimple;            
             string nameText = text3;
             //数量与重量
             string text5 = c.Num.ToFormat() ?? "";
@@ -511,7 +522,7 @@ namespace AutoBuy
                             //}
                             int num3 = e.Value / 10;
                             num3 = ((e.Value < 0) ? (num3 - 1) : (num3 + 1));
-                            text14 = "Lv." + num3 + text15 + " " + text14;
+                            text14 = "Lv." + num3 + text15 + " " + text14+"$" + num3 + "$";
                             if (infoMode && e.IsFoodTraitMain)
                             {
                                 text14 += "traitAdditive".lang();
@@ -523,12 +534,30 @@ namespace AutoBuy
                 }
                     
             }
+
             if (t.trait is TraitGene)
             {
                 geneElemntText = GeneWriteNote(t.trait);
                 elementsText += geneElemntText;
             }
-            return new ItemInfo(nameText,nameSimpleText ,detailText, tagText,elementsText,stockNum);
+            ItemInfo info = new ItemInfo(nameText, nameSimpleText, detailText, tagText, elementsText, stockNum);
+            //提取名字的数值
+            bool isWeapon = c.IsWeapon || c.IsRangedWeapon || c.IsAmmo || c.IsThrownWeapon;
+            if (true)
+            {
+                var nameValueMatches = Regex.Matches(c.NameOne, @"\d+");
+                foreach (Match match in nameValueMatches)
+                {
+                    info.nameValue.Add(match.Value);
+                }
+                //UDebug.Log(c.NameOne);
+                //foreach (var i in info.nameValue)
+                //{
+                //    UDebug.Log(i);
+                //}
+            }
+            
+            return info;
         }
         public static string AddNote(
             Thing t, 
@@ -574,10 +603,12 @@ namespace AutoBuy
                     list.Sort((Element a, Element b) => a.SortVal() - b.SortVal());
                     break;
             }
-
+            //提取数值的分支判定
+            bool isWeapon = t.IsEquipmentOrRangedOrAmmo || t.IsThrownWeapon || t.trait is TraitToolMusic;
+            bool isshowTraits = !isWeapon || t.ShowFoodEnc;
             foreach (Element item in list)
             {
-                 result = result+AddEncNote(t.elements.Card,item,mode,funcText);
+                result = result + AddEncNote(t.elements.Card, item, mode, funcText) + (isshowTraits ? "" : "$" + item.Value + "$") +";" ;
             }
             return result;
         }
@@ -748,7 +779,6 @@ namespace AutoBuy
             //AutoBuyMain();
             //LayerInventory.TryShowGuide(uIInventory.list);
         }
-
         private static IEnumerator AutoBuyMainRoutine()
         {
             while (!pause)
@@ -831,17 +861,17 @@ namespace AutoBuy
                     Thing t = item;
                     if (t == null) continue;
                     ItemInfo itemInfo = GetThingInfo(t);
-                    //UDebug.Log(itemInfo.name);
-                    foreach (var i in configeData.planList)
+                //UDebug.Log(itemInfo.name);
+                if (BanIsMatch(itemInfo)) { continue; }//命中禁止购买关键字则跳过
+                foreach (var i in configeData.planList)
                     {
                         if (!i.isActive) {  continue; }
                         switch (i.filterMdoe)
                         {
                             case FilterMdoe.Name:
-                                
-                                if (IsMatch(i.isAllMatch?itemInfo.nameSimple:itemInfo.name , i.keyword, isall: i.isAllMatch))
+                                if (IsMatch(i.isAllMatch?itemInfo.nameSimple:itemInfo.name , i.keyword, isall: i.isAllMatch,isNameValue: itemInfo.nameValue.Count == 1, nameValue: itemInfo.nameValue.Count == 0? 0:int.Parse(itemInfo.nameValue[0])))
                                 {
-                                AddToMatchThings(item);
+                                   AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.Detail:
@@ -857,9 +887,19 @@ namespace AutoBuy
                                 }
                                 break;
                             case FilterMdoe.Element:
-                                if (IsMatch(itemInfo.elements, i.keyword))
+                                bool rst = false;
+                                string[] parts = itemInfo.elements.Split(';');
+                                 foreach (var part in parts)
+                                  {
+                                    if(IsMatch(part, i.keyword, isElementValueMatch: true))
+                                    {
+                                        rst = true;
+                                        break;
+                                    }
+                                }
+                                if(rst)
                                 {
-                                    AddToMatchThings(item);
+                                  AddToMatchThings(item);
                                 }
                                 break;
                             case FilterMdoe.StockNum:
@@ -879,22 +919,135 @@ namespace AutoBuy
 
                 }
         }
-        public static bool IsMatch(string text, string keyword,bool isall = false)
+        public static bool IsMatch(string text, string keyword,bool isall = false,bool isElementValueMatch = false,bool isNameValue = false,int nameValue = 0)
         {
-
+            //UDebug.Log($"IsMatch called with text: '{text}', keyword: '{keyword}', isall: {isall}, isElementValueMatch: {isElementValueMatch}, isNameValue: {isNameValue}, nameValue: {nameValue}");
+            bool result = false;
+            bool resultValue = true;
+            bool hasComparison = keyword.Contains(">") || keyword.Contains("<");
+            string op = "";
+            string keywordValue = "";
+            string textValue = "";
+            //string[] parts  = text.Split(';');
+            //foreach(var i in parts){
+            //    UDebug.Log("IsMatch部分文本："+ i);
+            //}
+            if (hasComparison)
+            {
+                var match = Regex.Match(keyword, @"^([^<>=!]+)([<>=!]=?)(\d+)$");
+                keyword = match.Groups[1].Value;
+                op = match.Groups[2].Value;
+                keywordValue = match.Groups[3].Value;
+                if (isElementValueMatch)
+                {
+                    var matchText = Regex.Match(text, @"^(.*?)\$(\d+)\$");
+                    text = matchText.Groups[1].Value;
+                    textValue = matchText.Groups[2].Value;
+                }
+                resultValue = false;
+                //UDebug.Log($"Parsed keyword: '{keyword}', operator: '{op}', keywordValue: '{keywordValue}',text：‘{text}’,textValue:'{textValue}'");
+            }
             if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword))
                 return false;
-           
-                if (isall) 
-                { 
-                    return string.Equals(text, keyword, StringComparison.OrdinalIgnoreCase);
-                } 
-                else
-                {
-                    return text.Contains(keyword); 
-                }
-        }
 
+             if (isall) 
+             { 
+                result = string.Equals(text, keyword, StringComparison.OrdinalIgnoreCase);
+             } 
+             else
+             {
+                result = text.Contains(keyword); 
+             }
+
+            if (hasComparison)
+            {
+                if (IsNumber(keywordValue) && IsNumber(textValue) && isElementValueMatch)
+                {
+                    resultValue = ValueIsMatch(int.Parse(keywordValue), int.Parse(textValue), op);
+                }
+                if (IsNumber(keywordValue) && isNameValue)
+                {
+                    resultValue = ValueIsMatch(int.Parse(keywordValue),nameValue,op);
+                }
+            }
+            return result && resultValue;
+
+        }
+        public static bool BanIsMatch(ItemInfo itemInfo)
+        {
+            if(AutoBuy.configeData.banPlanList.Count<=0|| AutoBuy.configeData.banPlanList == null) { return false; }
+            foreach (PlanData i in AutoBuy.configeData.banPlanList)
+            {
+                if (!i.isActive) { continue; }
+                switch (i.filterMdoe)
+                {
+                    case FilterMdoe.Name:
+
+                        if (IsMatch(i.isAllMatch ? itemInfo.nameSimple : itemInfo.name, i.keyword, isall: i.isAllMatch, isNameValue: itemInfo.nameValue.Count == 1, nameValue: itemInfo.nameValue.Count == 0 ? 0 : int.Parse(itemInfo.nameValue[0])))
+                        {
+                            return true;
+                        }
+                        break;
+                    case FilterMdoe.Detail:
+                        if (IsMatch(itemInfo.detail, i.keyword))
+                        {
+                            return true;
+                        }
+                        break;
+                    case FilterMdoe.Tags:
+                        if (IsMatch(itemInfo.tags, i.keyword))
+                        {
+                            return true;
+                        }
+                        break;
+                    case FilterMdoe.Element:
+                        bool rst = false;
+                        string[] parts = itemInfo.elements.Split(';');
+                        foreach (var part in parts)
+                        {
+                            if (IsMatch(part, i.keyword, isElementValueMatch: true))
+                            {
+                                rst = true;
+                                break;
+                            }
+                        }
+                        if (rst)
+                        {
+                            return true;
+                        }
+                        break;
+                    case FilterMdoe.StockNum:
+                        if (IsMatch(itemInfo.stockNum, i.keyword))
+                        {
+                            return true;
+                        }
+                        break;
+                    case FilterMdoe.Default:
+                        if (IsMatch(itemInfo.allText, i.keyword))
+                        {
+                            return true;
+                        }
+                        break;
+                }
+            }
+            return false;
+        }
+        public static bool ValueIsMatch(int keyValue,int infoValue,string op)
+        {
+            switch (op)
+            {
+                case ">":
+                    return infoValue > keyValue;
+                case "<":
+                    return infoValue < keyValue;
+                default:
+                    return false;
+            }
+        }
+        public static bool IsNumber(string value)
+        {
+            return int.TryParse(value, out int result);
+        }
         public static bool FastBuy(Thing itemToBuy, int maxQuantity = 1)
         {
             if (itemToBuy == null || maxQuantity <= 0)
@@ -1085,6 +1238,7 @@ namespace AutoBuy
         public string elements;
         public string allText;
         public string stockNum;
+        public List<string> nameValue = new List<string>();
         public ItemInfo(string name,string nameSimple,string detail,string tags,string elements,string stockNum)
         {
             this.name = name;

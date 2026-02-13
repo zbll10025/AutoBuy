@@ -108,6 +108,8 @@
     <Compile Include="BuyHelp.cs" />
     <Compile Include="ConfigUI.cs" />
     <Compile Include="CoroutineRunner.cs" />
+    <Compile Include="uiCustomTab\BanCustomTab.cs" />
+    <Compile Include="uiCustomTab\CustomTab.cs" />
     <Compile Include="JsonHelper.cs" />
     <Compile Include="PoolHelp.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
